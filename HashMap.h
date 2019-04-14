@@ -242,7 +242,7 @@ class HashMap {
             pos = (pos + 1) % data.size();
         }
     }
-    
+
     size_t innerFind(const KeyType & key) const {
         size_t pos = mustBe(key);
         for (size_t i = 0; i < data.size(); ++i) {
@@ -266,30 +266,18 @@ class HashMap {
     }
 
     ValueType & operator [] (const KeyType & key) {
-        size_t pos = mustBe(key);
-        for (size_t i = 0; i < data.size(); ++i) {
-            if (!used[pos] && !removed[pos]) {
-                break;
-            }
-            if (used[pos] && data[pos].first == key) {
-                return data[pos].second;
-            }
-            pos = (pos + 1) % data.size();
+        size_t foundPos = innerFind(key);
+        if (foundPos != data.size()) {
+            return data[foundPos].second;
         }
         insert({key, ValueType()});
         return (*this)[key];
     }
 
     const ValueType & at(const KeyType & key) const {
-        size_t pos = mustBe(key);
-        for (size_t i = 0; i < data.size(); ++i) {
-            if (!used[pos] && !removed[pos]) {
-                break;
-            }
-            if (used[pos] && data[pos].first == key) {
-                return data[pos].second;
-            }
-            pos = (pos + 1) % data.size();
+        size_t foundPos = innerFind(key);
+        if (foundPos != data.size()) {
+            return data[foundPos].second;
         }
         throw std::out_of_range("");
     }
