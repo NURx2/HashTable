@@ -2,6 +2,8 @@
 #include <utility>
 #include <stdexcept>
 
+#include <iostream>
+
 template<class KeyType, class ValueType, class Hash = std::hash<KeyType>>
 class HashMap {
  private:
@@ -9,38 +11,38 @@ class HashMap {
     std::vector<bool> used;
     std::vector<bool> removed;
     Hash hasher;
-    size_t curSize;
-    size_t bigSize;  // includes removed elements, need for stopTheWorld
+    size_t cntUsedNotRemoved;  // cntAllAdded - cntUsedNotRemoved
+    size_t cntAdded;  // includes removed elements, need for reload
 
     size_t mustBe(const KeyType & key) const {
+        if (data.size() == 0) return 0;
         return hasher(key) % data.size();
     }
 
-    void stopTheWorld() {
+    void reload() {
         size_t newSize = 2 * data.size();
-        std::vector<std::pair<KeyType, ValueType>> ndata(newSize);
-        std::vector<bool> nused(newSize);
-        std::vector<bool> nremoved(newSize);
+        std::vector<std::pair<KeyType, ValueType>> newData(newSize);
+        std::vector<bool> newUsed(newSize);
         for (size_t i = 0; i < data.size(); ++i) {
             if (!used[i]) {
                 continue;
             }
             size_t pos = hasher(data[i].first) % newSize;
-            while (nused[pos]) {
+            while (newUsed[pos]) {
                 pos = (pos + 1) % newSize;
             }
-            nused[pos] = true;
-            ndata[pos] = data[i];
+            newUsed[pos] = true;
+            newData[pos] = data[i];
         }
-        swap(ndata, data);
-        swap(used, nused);
-        swap(removed, nremoved);
+        swap(data, newData);
+        swap(used, newUsed);
+        removed.assign(newSize, 0);
     }
 
  public:
     HashMap(Hash h = Hash()) : hasher(h) {
-        curSize = 0;
-        bigSize = 0;
+        cntUsedNotRemoved = 0;
+        cntAdded = 0;
         data.resize(1);
         used.resize(1);
         removed.resize(1);
@@ -54,36 +56,38 @@ class HashMap {
         }
     }
 
-    HashMap(const std::initializer_list<std::pair<KeyType, ValueType>> & il,
-        Hash h = Hash()) : HashMap(h) {
+    HashMap(
+        std::initializer_list<std::pair<KeyType, ValueType>> il,
+        Hash h = Hash()
+    ) : HashMap(h) {
         for (auto & x : il) {
             insert(x);
         }
     }
 
     class iterator {
-     friend class HashMap;  // когда нулы
+     friend class HashMap;
      private:
-        size_t i;
-        HashMap * p;
+        size_t elementIndex;
+        HashMap * owner;
 
-        size_t next(size_t x) {
-            ++x;
-            for (; x < p->data.size(); ++x) {
-                if (p->used[x]) {
+        size_t next(size_t curInd) {
+            ++curInd;
+            for (; curInd < owner->data.size(); ++curInd) {
+                if (owner->used[curInd]) {
                     break;
                 }
             }
-            return x;
+            return curInd;
         }
 
      public:
-        iterator(HashMap * a = 0, size_t x = 0) : p(a) {
-            if (p == 0) {
+        explicit iterator(HashMap * owner = 0, size_t beg = 0) : owner(owner) {
+            if (this->owner == 0) {
                 return;
             }
-            for (i = x; i < p->data.size(); ++i) {
-                if (p->used[i]) {
+            for (elementIndex = beg; elementIndex < this->owner->data.size(); ++elementIndex) {
+                if (this->owner->used[elementIndex]) {
                     break;
                 }
             }
@@ -91,18 +95,18 @@ class HashMap {
 
         std::pair<const KeyType, ValueType> & operator * () {
             return reinterpret_cast<std::pair<const KeyType, ValueType>&>(
-                p->data[i]
+                owner->data[elementIndex]
             );
         }
 
         std::pair<const KeyType, ValueType> * operator -> () {
             return reinterpret_cast<std::pair<const KeyType, ValueType>*>(
-                &p->data[i]
+                &owner->data[elementIndex]
             );
         }
 
         bool operator == (const iterator & a) const {
-            return a.i == i && a.p == p;
+            return a.elementIndex == elementIndex && a.owner == owner;
         }
 
         bool operator != (const iterator & a) const {
@@ -110,13 +114,13 @@ class HashMap {
         }
 
         iterator operator ++ (int) {
-            int j = i;
-            i = next(i);
-            return iterator(p, j);
+            int j = elementIndex;
+            elementIndex = next(elementIndex);
+            return iterator(owner, j);
         }
 
         iterator & operator ++ () {
-            i = next(i);
+            elementIndex = next(elementIndex);
             return *this;
         }
     };
@@ -124,26 +128,26 @@ class HashMap {
     class const_iterator {
      friend class HashMap;
      private:
-        size_t i;
-        const HashMap * p;
+        size_t elementIndex;
+        const HashMap * owner;
 
-        size_t next(size_t x) {
-            ++x;
-            for (; x < p->data.size(); ++x) {
-                if (p->used[x]) {
+        size_t next(size_t curInd) {
+            ++curInd;
+            for (; curInd < owner->data.size(); ++curInd) {
+                if (owner->used[curInd]) {
                     break;
                 }
             }
-            return x;
+            return curInd;
         }
 
      public:
-        const_iterator(const HashMap * a = 0, size_t x = 0) : p(a) {
-            if (p == 0) {
+        explicit const_iterator(const HashMap * owner = 0, size_t beg = 0) : owner(owner) {
+            if (this->owner == 0) {
                 return;
             }
-            for (i = x; i < p->data.size(); ++i) {
-                if (p->used[i]) {
+            for (elementIndex = beg; elementIndex < this->owner->data.size(); ++elementIndex) {
+                if (this->owner->used[elementIndex]) {
                     break;
                 }
             }
@@ -151,18 +155,18 @@ class HashMap {
         
         const std::pair<const KeyType, ValueType> & operator * () const {
             return reinterpret_cast<const std::pair<const KeyType, ValueType>&>(
-                p->data[i]
+                owner->data[elementIndex]
             );
         }
         
         const std::pair<const KeyType, ValueType> * operator -> () const {
             return reinterpret_cast<const std::pair<const KeyType, ValueType>*>(
-                &p->data[i]
+                &owner->data[elementIndex]
             );
         }
         
         bool operator == (const const_iterator & a) const {
-            return a.i == i && a.p == p;
+            return a.elementIndex == elementIndex && a.owner == owner;
         }
 
         bool operator != (const const_iterator & a) const {
@@ -170,13 +174,13 @@ class HashMap {
         }
 
         const_iterator operator ++ (int) {
-            int j = i;
-            i = next(i);
-            return const_iterator(p, j);
+            int j = elementIndex;
+            elementIndex = next(elementIndex);
+            return const_iterator(owner, j);
         }
 
         const_iterator & operator ++ () {
-            i = next(i);
+            elementIndex = next(elementIndex);
             return *this;
         }
     };
@@ -191,24 +195,24 @@ class HashMap {
 
     const_iterator begin() const {
         return const_iterator(this, 0);
-    } 
+    }
 
     const_iterator end() const {
         return const_iterator(this, data.size());
     }
 
     void insert(const std::pair<KeyType, ValueType> & p) {
-        ++curSize;
-        ++bigSize;
-        if (2 * bigSize >= data.size()) {
-            stopTheWorld();
+        ++cntUsedNotRemoved;
+        ++cntAdded;
+        if (2 * cntAdded >= data.size()) {
+            reload();
         }
         size_t pos = mustBe(p.first);
         bool already = false;
         for (size_t i = 0; i < data.size(); ++i) {
             if (used[pos] && data[pos].first == p.first) {
                 already = true;
-                --curSize;
+                --cntUsedNotRemoved;
                 break;
             }
             if (!used[pos]) {
@@ -232,39 +236,33 @@ class HashMap {
             if (used[pos] && data[pos].first == key) {
                 removed[pos] = true;
                 used[pos] = false;
-                --curSize;
+                --cntUsedNotRemoved;
                 break;
             }
             pos = (pos + 1) % data.size();
         }
+    }
+    
+    size_t innerFind(const KeyType & key) const {
+        size_t pos = mustBe(key);
+        for (size_t i = 0; i < data.size(); ++i) {
+            if (!used[pos] && !removed[pos]) {
+                break;
+            }
+            if (used[pos] && data[pos].first == key) {
+                return pos;
+            }
+            pos = (pos + 1) % data.size();
+        }
+        return data.size();
     }
 
     iterator find(const KeyType & key) {
-        size_t pos = mustBe(key);
-        for (size_t i = 0; i < data.size(); ++i) {
-            if (!used[pos] && !removed[pos]) {
-                break;
-            }
-            if (used[pos] && data[pos].first == key) {
-                return iterator(this, pos);
-            }
-            pos = (pos + 1) % data.size();
-        }
-        return end();
+        return iterator(this, innerFind(key));
     }
 
     const_iterator find(const KeyType & key) const {
-        size_t pos = mustBe(key);
-        for (size_t i = 0; i < data.size(); ++i) {
-            if (!used[pos] && !removed[pos]) {
-                break;
-            }
-            if (used[pos] && data[pos].first == key) {
-                return const_iterator(this, pos);
-            }
-            pos = (pos + 1) % data.size();
-        }
-        return end();
+        return const_iterator(this, innerFind(key));
     }
 
     ValueType & operator [] (const KeyType & key) {
@@ -297,8 +295,8 @@ class HashMap {
     }
 
     void clear() {
-        curSize = 0;
-        bigSize = 0;
+        cntUsedNotRemoved = 0;
+        cntAdded = 0;
         data.clear();
         used.clear();
         removed.clear();
@@ -312,10 +310,22 @@ class HashMap {
     }
 
     size_t size() const {
-        return curSize;
+        return cntUsedNotRemoved;
     }
 
     size_t empty() const {
         return size() == 0;
     }
 };
+
+// def getInterpol(xs, ys, x):
+//     ret = 0.
+//     n = len(xs)
+//     for i in range(0, n):
+//         cur = 1
+//         for j in range(0, n):
+//             if j != i:
+//                 cur *= ys[i] * (x - xs[j]) // (xs[i] - xs[j])
+//         ret += cur
+//     return ret
+//         
