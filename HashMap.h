@@ -11,8 +11,8 @@ class HashMap {
     std::vector<bool> used;
     std::vector<bool> removed;
     Hash hasher;
-    size_t cntUsedNotRemoved;  // cntAllAdded - cntUsedNotRemoved
-    size_t cntAdded;  // includes removed elements, need for reload
+    size_t cntUsedNotRemoved;
+    size_t cntAdded;
 
     size_t keyToValidIndex(const KeyType & key) const {
         return hasher(key) % data.size();
@@ -64,12 +64,14 @@ class HashMap {
         }
     }
 
-    class iterator {
+    template <typename HMtype>
+    class innerIterator {
      friend class HashMap;
-     private:
+     protected:
         size_t elementIndex;
-        HashMap * owner;
+        HMtype * owner;
 
+     private:
         size_t next(size_t curInd) {
             ++curInd;
             for (; curInd < owner->data.size(); ++curInd) {
@@ -81,7 +83,7 @@ class HashMap {
         }
 
      public:
-        explicit iterator(HashMap * owner = 0, size_t beg = 0) : owner(owner) {
+        explicit innerIterator(HMtype * owner = 0, size_t beg = 0) : owner(owner) {
             if (this->owner == 0) {
                 return;
             }
@@ -92,6 +94,32 @@ class HashMap {
             }
         }
 
+        bool operator == (const innerIterator & a) const {
+            return a.elementIndex == elementIndex && a.owner == owner;
+        }
+
+        bool operator != (const innerIterator & a) const {
+            return !(*this == a);
+        }
+
+        innerIterator operator ++ (int) {
+            int j = elementIndex;
+            elementIndex = next(elementIndex);
+            return innerIterator(owner, j);
+        }
+
+        innerIterator & operator ++ () {
+            elementIndex = next(elementIndex);
+            return *this;
+        }
+    };
+
+    class iterator : public innerIterator<HashMap> {
+    using innerIterator<HashMap>::owner;
+    using innerIterator<HashMap>::elementIndex;
+    using innerIterator<HashMap>::innerIterator;
+
+     public:
         std::pair<const KeyType, ValueType> & operator * () {
             return reinterpret_cast<std::pair<const KeyType, ValueType>&>(
                 owner->data[elementIndex]
@@ -103,55 +131,14 @@ class HashMap {
                 &owner->data[elementIndex]
             );
         }
-
-        bool operator == (const iterator & a) const {
-            return a.elementIndex == elementIndex && a.owner == owner;
-        }
-
-        bool operator != (const iterator & a) const {
-            return !(*this == a);
-        }
-
-        iterator operator ++ (int) {
-            int j = elementIndex;
-            elementIndex = next(elementIndex);
-            return iterator(owner, j);
-        }
-
-        iterator & operator ++ () {
-            elementIndex = next(elementIndex);
-            return *this;
-        }
     };
 
-    class const_iterator {
-     friend class HashMap;
-     private:
-        size_t elementIndex;
-        const HashMap * owner;
-
-        size_t next(size_t curInd) {
-            ++curInd;
-            for (; curInd < owner->data.size(); ++curInd) {
-                if (owner->used[curInd]) {
-                    break;
-                }
-            }
-            return curInd;
-        }
+    class const_iterator : public innerIterator<const HashMap> {
+    using innerIterator<const HashMap>::owner;
+    using innerIterator<const HashMap>::elementIndex;
+    using innerIterator<const HashMap>::innerIterator;
 
      public:
-        explicit const_iterator(const HashMap * owner = 0, size_t beg = 0) : owner(owner) {
-            if (this->owner == 0) {
-                return;
-            }
-            for (elementIndex = beg; elementIndex < this->owner->data.size(); ++elementIndex) {
-                if (this->owner->used[elementIndex]) {
-                    break;
-                }
-            }
-        }
-        
         const std::pair<const KeyType, ValueType> & operator * () const {
             return reinterpret_cast<const std::pair<const KeyType, ValueType>&>(
                 owner->data[elementIndex]
@@ -162,25 +149,6 @@ class HashMap {
             return reinterpret_cast<const std::pair<const KeyType, ValueType>*>(
                 &owner->data[elementIndex]
             );
-        }
-        
-        bool operator == (const const_iterator & a) const {
-            return a.elementIndex == elementIndex && a.owner == owner;
-        }
-
-        bool operator != (const const_iterator & a) const {
-            return !(*this == a);
-        }
-
-        const_iterator operator ++ (int) {
-            int j = elementIndex;
-            elementIndex = next(elementIndex);
-            return const_iterator(owner, j);
-        }
-
-        const_iterator & operator ++ () {
-            elementIndex = next(elementIndex);
-            return *this;
         }
     };
 
@@ -304,15 +272,3 @@ class HashMap {
         return size() == 0;
     }
 };
-
-// def getInterpol(xs, ys, x):
-//     ret = 0.
-//     n = len(xs)
-//     for i in range(0, n):
-//         cur = 1
-//         for j in range(0, n):
-//             if j != i:
-//                 cur *= ys[i] * (x - xs[j]) // (xs[i] - xs[j])
-//         ret += cur
-//     return ret
-//         
