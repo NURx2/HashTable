@@ -14,8 +14,7 @@ class HashMap {
     size_t cntUsedNotRemoved;  // cntAllAdded - cntUsedNotRemoved
     size_t cntAdded;  // includes removed elements, need for reload
 
-    size_t mustBe(const KeyType & key) const {
-        if (data.size() == 0) return 0;
+    size_t keyToValidIndex(const KeyType & key) const {
         return hasher(key) % data.size();
     }
 
@@ -207,7 +206,7 @@ class HashMap {
         if (2 * cntAdded >= data.size()) {
             reload();
         }
-        size_t pos = mustBe(p.first);
+        size_t pos = keyToValidIndex(p.first);
         bool already = false;
         for (size_t i = 0; i < data.size(); ++i) {
             if (used[pos] && data[pos].first == p.first) {
@@ -228,7 +227,7 @@ class HashMap {
     }
 
     void erase(const KeyType & key) {
-        size_t pos = mustBe(key);
+        size_t pos = keyToValidIndex(key);
         for (size_t i = 0; i < data.size(); ++i) {
             if (!used[pos] && !removed[pos]) {
                 break;
@@ -244,7 +243,7 @@ class HashMap {
     }
 
     size_t innerFind(const KeyType & key) const {
-        size_t pos = mustBe(key);
+        size_t pos = keyToValidIndex(key);
         for (size_t i = 0; i < data.size(); ++i) {
             if (!used[pos] && !removed[pos]) {
                 break;

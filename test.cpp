@@ -72,15 +72,12 @@ void const_check() {
 
     HashMap<int, int>::const_iterator it = map.find(3);
     it->second;
-    std::cerr << "!!!\n";
     if (it->second != 4)
         fail("not found 3, incorrect find or insert");
     it = map.find(7);
-    // std::cerr << "!!\n";
     if (it != map.end())
         fail("found 7? incorrect find or insert");
-    // std::cerr << "!!!\n";
-
+    
     static_assert(std::is_same<
         const int,
         std::remove_reference<decltype(map.at(1))>::type
