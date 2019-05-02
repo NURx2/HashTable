@@ -28,3 +28,5 @@ HashMap<int, int>::const_iterator it;
 it = myConstHashmap.find(3);  // it->second == 4
 it = myConstHashmap.find(7);  // it->second == myConstHashMap.end()
 ```
+
+for more examples look at `test.cpp`
